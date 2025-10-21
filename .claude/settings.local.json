@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk:*)",
+      "Bash(if [ -d \"C:\\Users\\Retic\\Project\\CipherGenius\\data\\components\\protocols\" ])",
+      "Bash(then echo \"Directory exists\")",
+      "Bash(else mkdir -p \"C:\\Users\\Retic\\Project\\CipherGenius\\data\\components\\protocols\")",
+      "Bash(fi)",
+      "Bash(if not exist \"C:\\Users\\Retic\\Project\\CipherGenius\\src\\cipher_genius\\features\" mkdir \"C:\\Users\\Retic\\Project\\CipherGenius\\src\\cipher_genius\\features\")",
+      "Bash(powershell -Command:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-10-20T18:44:28.377967",
+  "prompt": "Requirements:\nScheme Type: authenticated_encryption\nPlatform: PlatformType.IOT_DEVICE (ResourceLevel",
+  "response": {
+    "selected_indices": [
+      0,
+      3
+    ],
+    "rationale": "Selected ChaCha20 (index 0) and Poly1305 (index 3) because they are the optimal combination for authenticated encryption on an ultra-lightweight IoT device with a 256-bit security level, and they match the requirement for a specific cipher and MAC scheme."
+  }
+}

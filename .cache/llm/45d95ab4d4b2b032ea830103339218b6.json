@@ -1,0 +1,16 @@
+{
+  "timestamp": "2025-10-20T18:04:39.862349",
+  "prompt": "Design architecture for authenticated_encryption using:\nComponents: AES, GCM\n\nRequirements: Scheme T",
+  "response": {
+    "composition": {
+      "pattern": "mac-then-encrypt"
+    },
+    "dataflow": [
+      "Step 1: Generate a unique nonce for each encryption operation",
+      "Step 2: Use the nonce along with the plaintext to generate an authentication tag using AES-GCM",
+      "Step 3: Encrypt the plaintext using AES-GCM with the generated authentication tag",
+      "Step 4: Send the encrypted data and the authentication tag to the recipient",
+      "Step 5: Upon receiving the encrypted data and the authentication tag, the recipient uses the same nonce and AES-GCM to decrypt the data and verify the authentication tag"
+    ]
+  }
+}
