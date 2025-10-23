@@ -95,9 +95,19 @@ class SecurityAssessor:
             - quantum_readiness: Post-quantum assessment
             - recommendations: Security improvements
         """
+        # Handle both dict and CryptographicScheme objects
+        if hasattr(scheme, 'model_dump'):
+            scheme_dict = scheme.model_dump()
+        elif hasattr(scheme, 'to_dict'):
+            scheme_dict = scheme.to_dict()
+        elif isinstance(scheme, dict):
+            scheme_dict = scheme
+        else:
+            scheme_dict = str(scheme)
+
         assessment = {
             'timestamp': datetime.now().isoformat(),
-            'scheme_info': scheme.copy(),
+            'scheme_info': scheme_dict,
             'overall_score': 0,
             'threat_level': ThreatLevel.MEDIUM.value,
             'vulnerabilities': [],
@@ -108,11 +118,24 @@ class SecurityAssessor:
             'strengths': []
         }
 
-        # Extract scheme components
-        algorithm = scheme.get('algorithm', '').lower()
-        key_length = scheme.get('key_length', 0)
-        mode = scheme.get('mode', '').lower()
-        hash_function = scheme.get('hash_function', '').lower()
+        # Extract scheme components - handle both dict and CryptographicScheme objects
+        if isinstance(scheme, dict):
+            algorithm = scheme.get('algorithm', '').lower()
+            key_length = scheme.get('key_length', 0)
+            mode = scheme.get('mode', '').lower()
+            hash_function = scheme.get('hash_function', '').lower()
+        elif hasattr(scheme, 'architecture') and hasattr(scheme.architecture, 'components'):
+            # Extract from CryptographicScheme object
+            components = scheme.architecture.components
+            algorithm = components[0].name.lower() if components else ''
+            key_length = scheme.parameters.key_size if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'key_size') else 0
+            mode = scheme.parameters.additional_params.get('mode', '').lower() if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'additional_params') else ''
+            hash_function = scheme.parameters.additional_params.get('hash_function', '').lower() if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'additional_params') else ''
+        else:
+            algorithm = ''
+            key_length = 0
+            mode = ''
+            hash_function = ''
 
         # Initialize score
         score = 100
@@ -281,11 +304,47 @@ class SecurityAssessor:
 
         return result
 
-    def evaluate_attack_resistance(self, scheme: Dict[str, Any]) -> Dict[str, List[str]]:
+    def evaluate_attack_resistance(self, scheme) -> Dict[str, List[str]]:
         """Evaluate resistance against various attacks"""
-        algorithm = scheme.get('algorithm', '').lower()
-        key_length = scheme.get('key_length', 0)
-        mode = scheme.get('mode', '').lower()
+        # Extract scheme components - handle both dict and CryptographicScheme objects
+        if isinstance(scheme, dict):
+            algorithm = scheme.get('algorithm', '').lower()
+            key_length = scheme.get('key_length', 0) or 0
+            mode = scheme.get('mode', '').lower()
+        elif hasattr(scheme, 'architecture') and hasattr(scheme.architecture, 'components'):
+            # Extract from CryptographicScheme object
+            components = scheme.architecture.components
+            algorithm = components[0].name.lower() if components else ''
+
+            # Extract key length from parameters or components
+            key_length = 0
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'key_size'):
+                key_length = scheme.parameters.key_size or 0
+
+            # Try to get key size from components if not found in parameters
+            if not key_length and components:
+                for comp in components:
+                    if hasattr(comp, 'parameters') and hasattr(comp.parameters, 'key_size'):
+                        key_sizes = comp.parameters.key_size
+                        if isinstance(key_sizes, list) and key_sizes:
+                            key_length = key_sizes[0]  # Use the first key size
+                            break
+                        elif isinstance(key_sizes, int):
+                            key_length = key_sizes
+                            break
+
+            # Extract mode from parameters or component names
+            mode = ''
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'additional_params'):
+                mode = scheme.parameters.additional_params.get('mode', '').lower()
+        else:
+            algorithm = ''
+            key_length = 0
+            mode = ''
+
+        # Ensure key_length is an integer
+        if key_length is None:
+            key_length = 0
 
         resistance = {
             'resistant': [],
@@ -333,8 +392,19 @@ class SecurityAssessor:
                 resistance['potentially_vulnerable'].append('quantum: AES-128 security halved by Grover\'s algorithm')
 
         # Collision attacks (for hash functions)
-        if scheme.get('hash_function'):
-            hash_func = scheme['hash_function'].lower()
+        hash_func = ''
+        if isinstance(scheme, dict):
+            if scheme.get('hash_function'):
+                hash_func = scheme['hash_function'].lower()
+        elif hasattr(scheme, 'architecture'):
+            # Check if any component is a hash function
+            components = scheme.architecture.components if hasattr(scheme.architecture, 'components') else []
+            hash_components = [comp for comp in components if hasattr(comp, 'category') and hasattr(comp, 'name') and
+                             ('hash' in comp.category.lower() or 'hash' in comp.name.lower())]
+            if hash_components:
+                hash_func = hash_components[0].name.lower()
+
+        if hash_func:
             if 'md5' in hash_func:
                 resistance['vulnerable'].append('collision: MD5 has practical collision attacks')
             elif 'sha1' in hash_func:
@@ -343,13 +413,30 @@ class SecurityAssessor:
                 resistance['resistant'].append('collision: No practical collision attacks known')
 
         # MITM attacks
-        if scheme.get('includes_authentication', False):
+        includes_auth = False
+        if isinstance(scheme, dict):
+            includes_auth = scheme.get('includes_authentication', False)
+        elif hasattr(scheme, 'architecture'):
+            # Check if any component provides authentication
+            components = scheme.architecture.components if hasattr(scheme.architecture, 'components') else []
+            includes_auth = any('mac' in comp.category.lower() or 'aead' in comp.category.lower() or 'authentication' in comp.name.lower()
+                              for comp in components if hasattr(comp, 'category') and hasattr(comp, 'name'))
+
+        if includes_auth:
             resistance['resistant'].append('mitm: Authentication prevents man-in-the-middle attacks')
         else:
             resistance['potentially_vulnerable'].append('mitm: Requires additional authentication mechanism')
 
         # Replay attacks
-        if scheme.get('includes_nonce', False) or 'gcm' in mode:
+        includes_nonce = False
+        if isinstance(scheme, dict):
+            includes_nonce = scheme.get('includes_nonce', False)
+        elif hasattr(scheme, 'parameters'):
+            # Check if parameters include nonce/IV
+            includes_nonce = (hasattr(scheme.parameters, 'nonce_size') and scheme.parameters.nonce_size is not None) or \
+                           ('gcm' in mode or 'ccm' in mode or 'eax' in mode)
+
+        if includes_nonce or 'gcm' in mode:
             resistance['resistant'].append('replay: Nonce/IV prevents replay attacks')
         else:
             resistance['potentially_vulnerable'].append('replay: Should implement nonce or timestamp validation')
@@ -374,11 +461,47 @@ class SecurityAssessor:
 
         return max(0, min(100, score))
 
-    def compliance_check(self, scheme: Dict[str, Any]) -> Dict[str, bool]:
+    def compliance_check(self, scheme) -> Dict[str, bool]:
         """Check compliance with various standards"""
-        algorithm = scheme.get('algorithm', '').lower()
-        key_length = scheme.get('key_length', 0)
-        mode = scheme.get('mode', '').lower()
+        # Extract scheme components - handle both dict and CryptographicScheme objects
+        if isinstance(scheme, dict):
+            algorithm = scheme.get('algorithm', '').lower()
+            key_length = scheme.get('key_length', 0) or 0
+            mode = scheme.get('mode', '').lower()
+        elif hasattr(scheme, 'architecture') and hasattr(scheme.architecture, 'components'):
+            # Extract from CryptographicScheme object
+            components = scheme.architecture.components
+            algorithm = components[0].name.lower() if components else ''
+
+            # Extract key length from parameters or components
+            key_length = 0
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'key_size'):
+                key_length = scheme.parameters.key_size or 0
+
+            # Try to get key size from components if not found in parameters
+            if not key_length and components:
+                for comp in components:
+                    if hasattr(comp, 'parameters') and hasattr(comp.parameters, 'key_size'):
+                        key_sizes = comp.parameters.key_size
+                        if isinstance(key_sizes, list) and key_sizes:
+                            key_length = key_sizes[0]  # Use the first key size
+                            break
+                        elif isinstance(key_sizes, int):
+                            key_length = key_sizes
+                            break
+
+            # Extract mode from parameters or component names
+            mode = ''
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'additional_params'):
+                mode = scheme.parameters.additional_params.get('mode', '').lower()
+        else:
+            algorithm = ''
+            key_length = 0
+            mode = ''
+
+        # Ensure key_length is an integer
+        if key_length is None:
+            key_length = 0
 
         compliance = {
             'fips_140_2': False,
@@ -472,14 +595,51 @@ class SecurityAssessor:
 
         return assessment
 
-    def _generate_recommendations(self, scheme: Dict[str, Any],
+    def _generate_recommendations(self, scheme,
                                    vulnerabilities: List[Dict],
                                    compliance: Dict[str, bool]) -> List[str]:
         """Generate security improvement recommendations"""
         recommendations = []
-        algorithm = scheme.get('algorithm', '').lower()
-        key_length = scheme.get('key_length', 0)
-        mode = scheme.get('mode', '').lower()
+
+        # Extract scheme components - handle both dict and CryptographicScheme objects
+        if isinstance(scheme, dict):
+            algorithm = scheme.get('algorithm', '').lower()
+            key_length = scheme.get('key_length', 0) or 0
+            mode = scheme.get('mode', '').lower()
+        elif hasattr(scheme, 'architecture') and hasattr(scheme.architecture, 'components'):
+            # Extract from CryptographicScheme object
+            components = scheme.architecture.components
+            algorithm = components[0].name.lower() if components else ''
+
+            # Extract key length from parameters or components
+            key_length = 0
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'key_size'):
+                key_length = scheme.parameters.key_size or 0
+
+            # Try to get key size from components if not found in parameters
+            if not key_length and components:
+                for comp in components:
+                    if hasattr(comp, 'parameters') and hasattr(comp.parameters, 'key_size'):
+                        key_sizes = comp.parameters.key_size
+                        if isinstance(key_sizes, list) and key_sizes:
+                            key_length = key_sizes[0]  # Use the first key size
+                            break
+                        elif isinstance(key_sizes, int):
+                            key_length = key_sizes
+                            break
+
+            # Extract mode from parameters or component names
+            mode = ''
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'additional_params'):
+                mode = scheme.parameters.additional_params.get('mode', '').lower()
+        else:
+            algorithm = ''
+            key_length = 0
+            mode = ''
+
+        # Ensure key_length is an integer
+        if key_length is None:
+            key_length = 0
 
         # Address critical vulnerabilities first
         critical_vulns = [v for v in vulnerabilities if v.get('severity') == ThreatLevel.CRITICAL.value]
@@ -513,13 +673,41 @@ class SecurityAssessor:
             recommendations.append('Begin planning migration to post-quantum cryptography (Kyber, Dilithium)')
 
         # General best practices
-        if 'hash_function' not in scheme:
+        has_hash_function = False
+        if isinstance(scheme, dict):
+            has_hash_function = 'hash_function' in scheme and scheme['hash_function']
+        elif hasattr(scheme, 'architecture'):
+            # Check if any component is a hash function
+            components = scheme.architecture.components if hasattr(scheme.architecture, 'components') else []
+            has_hash_function = any('hash' in comp.category.lower() or 'hash' in comp.name.lower()
+                                  for comp in components if hasattr(comp, 'category') and hasattr(comp, 'name'))
+
+        if not has_hash_function:
             recommendations.append('Include hash function for integrity verification')
 
-        if not scheme.get('includes_authentication'):
+        # Check authentication and nonce based on scheme type
+        includes_auth = False
+        includes_nonce = False
+
+        if isinstance(scheme, dict):
+            includes_auth = scheme.get('includes_authentication', False)
+            includes_nonce = scheme.get('includes_nonce', False)
+        elif hasattr(scheme, 'architecture'):
+            # Check if any component provides authentication
+            components = scheme.architecture.components if hasattr(scheme.architecture, 'components') else []
+            includes_auth = any('mac' in comp.category.lower() or 'aead' in comp.category.lower() or 'authentication' in comp.name.lower()
+                              for comp in components if hasattr(comp, 'category') and hasattr(comp, 'name'))
+
+            # Check nonce/IV from parameters
+            if hasattr(scheme, 'parameters'):
+                includes_nonce = (hasattr(scheme.parameters, 'nonce_size') and scheme.parameters.nonce_size is not None) or \
+                               any('gcm' in comp.name.lower() or 'ccm' in comp.name.lower() or 'eax' in comp.name.lower()
+                                   for comp in components if hasattr(comp, 'name'))
+
+        if not includes_auth:
             recommendations.append('Implement message authentication (HMAC or authenticated encryption)')
 
-        if not scheme.get('includes_nonce'):
+        if not includes_nonce:
             recommendations.append('Ensure unique nonce/IV for each encryption operation')
 
         # Add positive reinforcement if scheme is strong

@@ -118,20 +118,57 @@ class SchemeComparator:
             'total_schemes': len(schemes)
         }
 
-    def calculate_metrics(self, scheme: Dict[str, Any]) -> ComparisonMetrics:
+    def calculate_metrics(self, scheme) -> ComparisonMetrics:
         """
         Calculate comparison metrics for a single scheme
 
         Args:
-            scheme: Dictionary containing scheme information
+            scheme: Dictionary or CryptographicScheme object containing scheme information
 
         Returns:
             ComparisonMetrics object with calculated scores
         """
-        name = scheme.get('name', '').lower()
-        scheme_type = scheme.get('type', '').lower()
-        key_size = scheme.get('key_size', 0)
-        properties = scheme.get('properties', {})
+        # Handle both dict and CryptographicScheme objects
+        if isinstance(scheme, dict):
+            name = scheme.get('name', '').lower()
+            scheme_type = scheme.get('type', '').lower()
+            key_size = scheme.get('key_size', 0)
+            properties = scheme.get('properties', {})
+        elif hasattr(scheme, 'metadata') and hasattr(scheme, 'architecture'):
+            # Extract from CryptographicScheme object
+            name = scheme.metadata.name.lower() if hasattr(scheme.metadata, 'name') else ''
+            scheme_type = scheme.metadata.scheme_type.lower() if hasattr(scheme.metadata, 'scheme_type') else ''
+
+            # Extract key size from parameters or components
+            key_size = 0
+            if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'key_size'):
+                key_size = scheme.parameters.key_size or 0
+
+            # Try to get key size from components if not found in parameters
+            if not key_size and hasattr(scheme, 'architecture') and hasattr(scheme.architecture, 'components'):
+                for comp in scheme.architecture.components:
+                    if hasattr(comp, 'parameters') and hasattr(comp.parameters, 'key_size'):
+                        key_sizes = comp.parameters.key_size
+                        if isinstance(key_sizes, list) and key_sizes:
+                            key_size = key_sizes[0]  # Use the first key size
+                            break
+                        elif isinstance(key_sizes, int):
+                            key_size = key_sizes
+                            break
+
+            # Extract properties
+            properties = {}
+            if hasattr(scheme, 'security_analysis') and hasattr(scheme.security_analysis, 'properties'):
+                properties = {'security_properties': scheme.security_analysis.properties}
+        else:
+            name = ''
+            scheme_type = ''
+            key_size = 0
+            properties = {}
+
+        # Ensure key_size is an integer
+        if key_size is None:
+            key_size = 0
 
         # Calculate security score (0-100)
         security_score = self._calculate_security_score(name, key_size, properties)
@@ -169,11 +206,17 @@ class SchemeComparator:
         if not schemes:
             return {'error': 'No schemes provided'}
 
+        # Helper to extract scheme name
+        def get_scheme_name(scheme):
+            if isinstance(scheme, dict):
+                return scheme.get('name', 'Unknown')
+            return scheme.metadata.name if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'name') else 'Unknown'
+
         metrics_list = []
         for scheme in schemes:
             metrics = self.calculate_metrics(scheme)
             metrics_list.append({
-                'name': scheme.get('name', 'Unknown'),
+                'name': get_scheme_name(scheme),
                 'metrics': metrics
             })
 
@@ -395,10 +438,25 @@ class SchemeComparator:
             scheme = item['scheme']
             metrics = item['metrics']
 
+            # Extract scheme information (handle both dict and CryptographicScheme)
+            if isinstance(scheme, dict):
+                name = scheme.get('name', 'Unknown')
+                scheme_type = scheme.get('type', 'Unknown')
+                key_size = scheme.get('key_size', 'N/A')
+            else:
+                # CryptographicScheme object
+                name = scheme.metadata.name if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'name') else 'Unknown'
+                scheme_type = scheme.metadata.scheme_type if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'scheme_type') else 'Unknown'
+
+                # Extract key size
+                key_size = 'N/A'
+                if hasattr(scheme, 'parameters') and hasattr(scheme.parameters, 'key_size'):
+                    key_size = scheme.parameters.key_size or 'N/A'
+
             table.append({
-                'name': scheme.get('name', 'Unknown'),
-                'type': scheme.get('type', 'Unknown'),
-                'key_size': scheme.get('key_size', 'N/A'),
+                'name': name,
+                'type': scheme_type,
+                'key_size': key_size,
                 'security_score': metrics.security_score,
                 'performance_score': metrics.performance_score,
                 'complexity_score': metrics.complexity_score,
@@ -445,15 +503,21 @@ class SchemeComparator:
             item for item in metrics_list if item['metrics'].quantum_resistance
         ]
 
+        # Helper to extract scheme name
+        def get_scheme_name(scheme):
+            if isinstance(scheme, dict):
+                return scheme.get('name', 'Unknown')
+            return scheme.metadata.name if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'name') else 'Unknown'
+
         return {
             'average_security_score': round(statistics.mean(security_scores), 2),
             'median_security_score': round(statistics.median(security_scores), 2),
             'highest_security': {
-                'name': highest_security['scheme'].get('name'),
+                'name': get_scheme_name(highest_security['scheme']),
                 'score': highest_security['metrics'].security_score
             },
             'lowest_security': {
-                'name': lowest_security['scheme'].get('name'),
+                'name': get_scheme_name(lowest_security['scheme']),
                 'score': lowest_security['metrics'].security_score
             },
             'quantum_resistant_count': len(quantum_resistant),
@@ -461,7 +525,7 @@ class SchemeComparator:
                 len(quantum_resistant) / len(metrics_list) * 100, 2
             ),
             'quantum_resistant_schemes': [
-                item['scheme'].get('name') for item in quantum_resistant
+                get_scheme_name(item['scheme']) for item in quantum_resistant
             ]
         }
 
@@ -472,15 +536,21 @@ class SchemeComparator:
         fastest = max(metrics_list, key=lambda x: x['metrics'].performance_score)
         slowest = min(metrics_list, key=lambda x: x['metrics'].performance_score)
 
+        # Helper to extract scheme name
+        def get_scheme_name(scheme):
+            if isinstance(scheme, dict):
+                return scheme.get('name', 'Unknown')
+            return scheme.metadata.name if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'name') else 'Unknown'
+
         return {
             'average_performance_score': round(statistics.mean(performance_scores), 2),
             'median_performance_score': round(statistics.median(performance_scores), 2),
             'fastest_scheme': {
-                'name': fastest['scheme'].get('name'),
+                'name': get_scheme_name(fastest['scheme']),
                 'score': fastest['metrics'].performance_score
             },
             'slowest_scheme': {
-                'name': slowest['scheme'].get('name'),
+                'name': get_scheme_name(slowest['scheme']),
                 'score': slowest['metrics'].performance_score
             },
             'performance_range': round(max(performance_scores) - min(performance_scores), 2)
@@ -490,6 +560,12 @@ class SchemeComparator:
         """Generate recommendations for different use cases"""
         recommendations = []
 
+        # Helper to extract scheme name
+        def get_scheme_name(scheme):
+            if isinstance(scheme, dict):
+                return scheme.get('name', 'Unknown')
+            return scheme.metadata.name if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'name') else 'Unknown'
+
         # Best overall
         best_overall = max(
             metrics_list,
@@ -497,7 +573,7 @@ class SchemeComparator:
         )
         recommendations.append({
             'use_case': 'General Purpose / Best Overall',
-            'recommended_scheme': best_overall['scheme'].get('name'),
+            'recommended_scheme': get_scheme_name(best_overall['scheme']),
             'reason': f"Highest overall score ({self._calculate_overall_score(best_overall['metrics'])}), "
                      f"balancing security, performance, and standardization"
         })
@@ -507,7 +583,7 @@ class SchemeComparator:
         if best_security != best_overall:
             recommendations.append({
                 'use_case': 'Maximum Security Required',
-                'recommended_scheme': best_security['scheme'].get('name'),
+                'recommended_scheme': get_scheme_name(best_security['scheme']),
                 'reason': f"Highest security score ({best_security['metrics'].security_score})"
             })
 
@@ -516,7 +592,7 @@ class SchemeComparator:
         if best_performance != best_overall:
             recommendations.append({
                 'use_case': 'Performance Critical Applications',
-                'recommended_scheme': best_performance['scheme'].get('name'),
+                'recommended_scheme': get_scheme_name(best_performance['scheme']),
                 'reason': f"Highest performance score ({best_performance['metrics'].performance_score})"
             })
 
@@ -531,7 +607,7 @@ class SchemeComparator:
             )
             recommendations.append({
                 'use_case': 'Future-Proof / Quantum Threat Protection',
-                'recommended_scheme': best_quantum['scheme'].get('name'),
+                'recommended_scheme': get_scheme_name(best_quantum['scheme']),
                 'reason': 'Quantum resistant with best overall metrics among quantum-safe options'
             })
 
@@ -540,7 +616,7 @@ class SchemeComparator:
         if best_standard['metrics'].standardization_score >= 90:
             recommendations.append({
                 'use_case': 'Regulatory Compliance / Industry Standards',
-                'recommended_scheme': best_standard['scheme'].get('name'),
+                'recommended_scheme': get_scheme_name(best_standard['scheme']),
                 'reason': f"Highest standardization score ({best_standard['metrics'].standardization_score}), "
                          "widely adopted and certified"
             })
@@ -550,7 +626,7 @@ class SchemeComparator:
         if simplest['metrics'].complexity_score <= 40:
             recommendations.append({
                 'use_case': 'Rapid Development / Simple Implementation',
-                'recommended_scheme': simplest['scheme'].get('name'),
+                'recommended_scheme': get_scheme_name(simplest['scheme']),
                 'reason': f"Lowest complexity score ({simplest['metrics'].complexity_score}), "
                          "easier to implement and maintain"
             })

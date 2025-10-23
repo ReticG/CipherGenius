@@ -482,12 +482,27 @@ def render_home_tab():
     with col_main:
         st.markdown("### 📝 Describe Your Security Requirements")
 
+        # Check if example was selected or if there's a saved requirement
+        default_text = st.session_state.get('example_text', '')
+        if not default_text:
+            default_text = st.session_state.get('saved_requirement_text', '')
+
         requirement_text = st.text_area(
             "Enter your requirements in natural language:",
+            value=default_text,
             height=150,
             placeholder="Example: Design an authenticated encryption scheme for IoT devices with 128-bit security, low memory usage (<2KB RAM), and resistance to side-channel attacks...",
-            help="Describe what you need - our AI will understand and generate appropriate cryptographic schemes"
+            help="Describe what you need - our AI will understand and generate appropriate cryptographic schemes",
+            key="requirement_input"
         )
+
+        # Save the current requirement text for persistence
+        if requirement_text:
+            st.session_state.saved_requirement_text = requirement_text
+
+        # Clear the example text after using it
+        if 'example_text' in st.session_state:
+            del st.session_state['example_text']
 
         col_opt1, col_opt2, col_opt3 = st.columns(3)
         with col_opt1:
@@ -508,7 +523,10 @@ def render_home_tab():
                     try:
                         # Parse requirements
                         parser = RequirementParser()
-                        req = parser.parse(requirement_text)
+                        parsed_req = parser.parse(requirement_text)
+
+                        # Extract the actual Requirement object from ParsedRequirement
+                        req = parsed_req.requirement
 
                         # Generate schemes
                         generator = SchemeGenerator()
@@ -525,7 +543,6 @@ def render_home_tab():
 
     with col_examples:
         st.markdown("### 💡 Quick Examples")
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
 
         examples = {
             "🌐 IoT Encryption": "Lightweight encryption for IoT devices with 128-bit security and memory under 2KB",
@@ -540,37 +557,72 @@ def render_home_tab():
                 st.session_state.example_text = example
                 st.rerun()
 
-        st.markdown('</div>', unsafe_allow_html=True)
-
     # Display generated schemes
     if st.session_state.generated_schemes:
         st.markdown("---")
         st.markdown("### 📋 Generated Cryptographic Schemes")
 
         for idx, scheme in enumerate(st.session_state.generated_schemes):
-            with st.expander(f"🔐 Scheme {idx + 1}: {scheme.get('name', 'Unnamed Scheme')}", expanded=(idx == 0)):
+            # Get scheme name from the CryptographicScheme object
+            scheme_name = scheme.metadata.name if hasattr(scheme, 'metadata') and hasattr(scheme.metadata, 'name') else f"Cryptographic Scheme {idx + 1}"
+
+            with st.expander(f"🔐 Scheme {idx + 1}: {scheme_name}", expanded=(idx == 0)):
                 # Scheme details in tabs
                 tab_overview, tab_components, tab_code, tab_analysis = st.tabs(
                     ["📊 Overview", "🧩 Components", "💻 Code", "🔍 Analysis"]
                 )
 
                 with tab_overview:
-                    st.json(scheme)
+                    # Convert scheme to dictionary for JSON display
+                    try:
+                        scheme_dict = scheme.model_dump() if hasattr(scheme, 'model_dump') else scheme.to_dict() if hasattr(scheme, 'to_dict') else str(scheme)
+                        st.json(scheme_dict)
+                    except Exception as e:
+                        st.error(f"Error displaying scheme: {e}")
+                        st.code(str(scheme))
 
                 with tab_components:
-                    if 'components' in scheme:
-                        for comp in scheme['components']:
-                            st.markdown(f'<span class="component-badge">{comp}</span>', unsafe_allow_html=True)
+                    if hasattr(scheme, 'architecture') and hasattr(scheme.architecture, 'components'):
+                        for comp in scheme.architecture.components:
+                            comp_name = comp.name if hasattr(comp, 'name') else str(comp)
+                            st.markdown(f'<span class="component-badge">{comp_name}</span>', unsafe_allow_html=True)
+                    else:
+                        st.info("No component information available")
 
                 with tab_code:
                     if generate_code:
-                        lang_tabs = st.tabs(["Python", "C", "Rust"])
-                        with lang_tabs[0]:
-                            st.code("# Python implementation\n# Coming soon...", language="python")
-                        with lang_tabs[1]:
-                            st.code("// C implementation\n// Coming soon...", language="c")
-                        with lang_tabs[2]:
-                            st.code("// Rust implementation\n// Coming soon...", language="rust")
+                        try:
+                            # Generate code using CodeGenerator
+                            from cipher_genius.codegen.generator import CodeGenerator
+                            codegen = CodeGenerator()
+
+                            with st.spinner("Generating code implementations..."):
+                                implementation = codegen.generate_all(scheme)
+
+                            lang_tabs = st.tabs(["Python", "C", "Pseudocode"])
+                            with lang_tabs[0]:
+                                st.code(implementation.python, language="python")
+                                st.download_button(
+                                    "Download Python Code",
+                                    implementation.python,
+                                    file_name=f"{scheme_name.replace(' ', '_')}.py",
+                                    mime="text/x-python"
+                                )
+                            with lang_tabs[1]:
+                                st.code(implementation.c, language="c")
+                                st.download_button(
+                                    "Download C Code",
+                                    implementation.c,
+                                    file_name=f"{scheme_name.replace(' ', '_')}.c",
+                                    mime="text/x-c"
+                                )
+                            with lang_tabs[2]:
+                                st.code(implementation.pseudocode, language="text")
+                        except Exception as e:
+                            st.error(f"Error generating code: {e}")
+                            st.info("Code generation is available. Please try again.")
+                    else:
+                        st.info("Code generation is disabled. Enable it in the options above.")
 
                 with tab_analysis:
                     if FEATURES_AVAILABLE and auto_validate:

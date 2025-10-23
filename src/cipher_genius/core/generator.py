@@ -54,8 +54,8 @@ class SchemeGenerator:
     ) -> CryptographicScheme:
         """Generate a single cryptographic scheme"""
 
-        # Step 1: Select components
-        selected_components = self._select_components(requirement)
+        # Step 1: Select components - pass variant_index to introduce variation
+        selected_components = self._select_components(requirement, variant_index)
 
         # Step 2: Design scheme architecture with LLM
         architecture = self._design_architecture(requirement, selected_components)
@@ -93,7 +93,7 @@ class SchemeGenerator:
 
         return scheme
 
-    def _select_components(self, requirement: Requirement) -> List[Component]:
+    def _select_components(self, requirement: Requirement, variant_index: int = 0) -> List[Component]:
         """Select appropriate components for the requirement"""
 
         # Search components meeting security requirements
@@ -147,15 +147,24 @@ class SchemeGenerator:
 
         logger.debug(f"Suitable component names (showing first 20): {[c.name for c in suitable[:20]]}")
 
-        # Use LLM to select best combination - increase limit to ensure we don't miss components
-        selected = self._llm_select_components(requirement, suitable[:20])
+        # Use LLM to select best combination - vary the selection based on variant_index
+        # For variant 0, use top 20 components
+        # For variant 1+, skip some components to get different combinations
+        start_idx = min(variant_index * 5, max(0, len(suitable) - 20))
+        end_idx = min(start_idx + 20, len(suitable))
+        component_slice = suitable[start_idx:end_idx]
+
+        logger.debug(f"Variant {variant_index}: selecting from components {start_idx}-{end_idx} (total {len(component_slice)} components)")
+
+        selected = self._llm_select_components(requirement, component_slice, variant_index)
 
         return selected
 
     def _llm_select_components(
         self,
         requirement: Requirement,
-        candidates: List[Component]
+        candidates: List[Component],
+        variant_index: int = 0
     ) -> List[Component]:
         """Use LLM to select best component combination"""
 
@@ -185,7 +194,11 @@ class SchemeGenerator:
                 return explicit_matches
 
         # Otherwise, use LLM to select from all candidates
-        system_prompt = """You are a cryptography expert selecting components for a secure scheme.
+        variant_guidance = ""
+        if variant_index > 0:
+            variant_guidance = f"\n\nIMPORTANT: This is variant #{variant_index + 1}. Please select DIFFERENT components from what you would typically choose first to provide variety."
+
+        system_prompt = f"""You are a cryptography expert selecting components for a secure scheme.
 Given requirements and candidate components, select the optimal combination.
 
 CRITICAL RULES:
@@ -193,7 +206,7 @@ CRITICAL RULES:
 2. For MAC schemes: always select MAC component + hash function (e.g., HMAC + SHA-256)
 3. For authenticated encryption: select cipher + AEAD mode OR cipher + MAC
 4. For signatures: select signature algorithm + hash function
-5. Match the scheme type exactly"""
+5. Match the scheme type exactly{variant_guidance}"""
 
         # Build component descriptions with enhanced info
         comp_desc = []

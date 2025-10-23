@@ -18,6 +18,11 @@ class ComponentType(str, Enum):
     MODE_OF_OPERATION = "mode"
     PROTOCOL = "protocol"
     CONSTRUCTION = "construction"
+    PUBLIC_KEY_ENCRYPTION = "public_key_encryption"
+    RANDOM_NUMBER_GENERATOR = "random_number_generator"
+    HOMOMORPHIC_ENCRYPTION = "homomorphic_encryption"
+    COMMITMENT_SCHEME = "commitment_scheme"
+    ENCRYPTION_SCHEME = "encryption_scheme"
 
 
 class Performance(BaseModel):

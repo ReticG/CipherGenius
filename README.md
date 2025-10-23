@@ -227,7 +227,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 If you use CipherGenius in your research, please cite:
 
 ```bibtex
-@software{ciphergenius2024,
+@software{ciphergenius2025,
   title={CipherGenius: An LLM-Driven Framework for Automated Cryptographic Scheme Generation},
   author={CipherGenius Team},
   year={2024},
