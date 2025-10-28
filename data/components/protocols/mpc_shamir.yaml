@@ -27,7 +27,7 @@ performance:
   memory: low
 
 security:
-  security_level: information_theoretic
+  security_level: 256  # Information-theoretically secure, using 256-bit field
   best_attack: none_possible
   attack_complexity: "information_theoretically_secure"
   status: secure

@@ -7,7 +7,7 @@ description: |
 
 parameters:
   key_size: [128, 256]
-  tag_size: [128, 256, 512]
+  tag_size: 256  # Variable output length, 256 is common
 
 properties:
   - keccak_based

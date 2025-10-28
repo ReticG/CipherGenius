@@ -7,7 +7,7 @@ description: |
 
 parameters:
   key_size: [128, 256]
-  tag_size: [64, 128]
+  tag_size: 128  # Common tag size, can be 64 or 128 bits
   nonce_size: 128
 
 properties:

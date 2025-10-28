@@ -9,7 +9,7 @@ description: |
 
 parameters:
   key_size: [256, 512]
-  output_size: [256, 512]
+  output_size: 256  # Typically 256 bits
   proof_size: [80, 96]
   curve: [Curve25519, secp256k1, BLS12-381]
 

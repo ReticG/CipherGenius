@@ -7,7 +7,7 @@ description: |
 
 parameters:
   key_size: [256, 512]
-  tag_size: [256, 512, 1024]
+  tag_size: 512  # Variable output length, 512 is common for KMAC256
 
 properties:
   - keccak_based

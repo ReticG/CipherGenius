@@ -9,7 +9,7 @@ description: |
 
 parameters:
   curve: [BN254, BLS12-381, BLS12-377]
-  key_size: 256
+  key_size: [256]
   pairing_type: Type-3
   security_parameter: [128, 256]
 

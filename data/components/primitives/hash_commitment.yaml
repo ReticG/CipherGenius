@@ -9,7 +9,7 @@ description: |
 parameters:
   hash_function: [SHA-256, SHA-3, BLAKE2, SHA-512]
   commitment_size: [256, 512]
-  nonce_size: [128, 256]
+  nonce_size: 256  # 128-bit minimum, 256-bit recommended
 
 properties:
   - computationally_hiding

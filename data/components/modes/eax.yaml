@@ -7,7 +7,7 @@ description: |
 
 parameters:
   block_size: 128
-  nonce_size: variable
+  nonce_size: 128  # Variable length supported, 128 bits is common
   tag_size: 128
 
 properties:

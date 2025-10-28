@@ -6,8 +6,8 @@ description: |
   authentication through direct keying. It uses a Merkle tree for parallelization.
 
 parameters:
-  key_size: 256
-  tag_size: [128, 256, 512]
+  key_size: [256]
+  tag_size: 256  # Variable output length, 256 is common default
 
 properties:
   - keyed_hash

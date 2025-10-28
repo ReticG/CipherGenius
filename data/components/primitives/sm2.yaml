@@ -8,7 +8,7 @@ description: |
 parameters:
   curve: SM2P256V1
   hash_function: SM3
-  key_size: 256
+  key_size: [256]
 
 properties:
   - elliptic_curve_based

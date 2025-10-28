@@ -8,7 +8,7 @@ description: |
 parameters:
   block_size: 128
   tweak_size: 128
-  key_size: 256  # Uses two keys (2 x 128 or 2 x 256)
+  key_size: [256, 512]  # Uses two keys (2 x 128 or 2 x 256)
   sector_based: true
 
 properties:

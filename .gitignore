@@ -83,3 +83,7 @@ credentials.json
 .coverage
 *.cover
 .mypy_cache/
+.cache/
+
+# Claude Code
+.claude/settings.local.json
